@@ -13,7 +13,7 @@ El trabajo práctico consistió en interactuar con la arquitectura UEFI como un 
 
 Se preparó un entorno de laboratorio utilizando **QEMU** y el firmware abierto **OVMF**. A través de la UEFI Shell, se analizó cómo esta arquitectura abstrae el hardware utilizando *Handles* y *Protocolos*, lo que brinda mayor seguridad y compatibilidad frente a los puertos fijos del antiguo BIOS Legacy.
 
-Se exploró la NVRAM interactuando con variables globales como `BootOrder` (la cual define la secuencia de arranque) y se inyectó exitosamente una variable de prueba (`TestSeguridad`). Además, se realizó el footprinting del sistema volcando el mapa de memoria y la lista de dispositivos PCI. En el mapa de memoria se identificaron regiones `RuntimeServicesCode`, las cuales no se borran al cargar el sistema operativo y son objetivos clave para inyectar bootkits persistentes.
+Se exploró la NVRAM interactuando con variables globales como `BootOrder` la cual define la secuencia de arranque: le indica al boot manager qué opciones de arranque (`Boot####`) debe intentar ejecutar y en qué orden. y se inyectó exitosamente una variable de prueba (`TestSeguridad`). Además, se realizó el footprinting del sistema volcando el mapa de memoria y la lista de dispositivos PCI. En el mapa de memoria se identificaron regiones `RuntimeServicesCode`, que son objetivos clave para inyectar bootkits persistentes, pues no se  borran al cargar el sistema operativo y contienen código que se ejecuta con privilegios elevados, lo que permitiría, bajo determinadas condiciones, mantener el control sobre el sistema operativo y ejecutar código malicioso sin ser detectados por un antivirus.
 
 A continuación, algunas capturas del proceso de exploración:
 
@@ -43,9 +43,9 @@ Drivers cargados en el entorno pre-OS.
 
 ## Segunda Parte — Desarrollo y Análisis en C
 
-En esta fase se desarrolló una aplicación en C nativa para UEFI. Dado que se trata de un entorno *freestanding* sin librerías estándar (como libc), se debió utilizar el protocolo `ConOut` (`SystemTable->ConOut->OutputString`) del firmware para poder imprimir texto en pantalla en lugar de un `printf` convencional. El código fue compilado al formato PE/COFF de Windows (`aplicacion.efi`).
+En esta fase se desarrolló una aplicación en C nativa para UEFI. Dado que se trata de un entorno pre-OS, sin librerías estándar (como libc), se debió utilizar el protocolo `ConOut` (`SystemTable->ConOut->OutputString`) del firmware para poder imprimir texto en pantalla en lugar de un `printf` convencional. El código fue compilado al formato ejecutable PE/COFF, utilizado por UEFI para sus aplicaciones y controladores (`aplicacion.efi`).
 
-El binario incluyó una instrucción de breakpoint estático (`0xCC`). Al analizar el archivo resultante con el descompilador **Ghidra**, se observó cómo este traduce las rutinas UEFI a llamadas genéricas por falta de firmas, e interpreta por defecto el valor `0xCC` como el entero con signo `-52` (opcode crítico en ciberseguridad utilizado para anti-debugging y hooks).
+El binario incluyó una instrucción de breakpoint estático (`0xCC`). Al analizar el archivo resultante con el descompilador **Ghidra**, se identificó dicha instrucción en el pseudocódigo. El opcode `0xCC` corresponde a INT3 en arquitectura x86 y se utiliza para generar excepciones de breakpoint durante la depuración. Los depuradores utilizan este mismo opcode para implementar software breakpoints, reemplazando temporalmente instrucciones del programa por 0xCC para detener su ejecución en puntos específicos. Es por esto que es relevante en ciberseguridad, ya que puede emplearse en técnicas de anti-debugging para detectar la presencia de un depurador o dificultar el análisis de un programa.
 
 Finalmente, el binario fue cargado y ejecutado exitosamente dentro del emulador QEMU.
 
